@@ -1,0 +1,65 @@
+name: tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  unit:
+    name: unit tests (${{ matrix.os }}, Python ${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python: ["3.9", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: python -m unittest discover -s tests -t . -v
+
+  arch:
+    name: real pacman (Arch Linux container)
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: pacman -Syu --noconfirm python
+      - run: python -m vux platform
+      - run: python -m vux search '^cowsay$'
+      - run: python -m vux install -y cowsay
+      - run: cowsay "installed by vux"
+      - run: python -m vux list --explicit
+      - run: python -m vux remove -y cowsay
+      - run: "! command -v cowsay"
+
+  windows:
+    name: real winget (Windows)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: python -m vux platform
+      - name: check winget is on this runner
+        id: winget
+        shell: pwsh
+        run: |
+          if (Get-Command winget -ErrorAction SilentlyContinue) {
+            winget --version
+            "found=true" >> $env:GITHUB_OUTPUT
+          } else {
+            Write-Host "::warning::winget is not installed on this runner image; skipping real winget checks"
+          }
+      - if: steps.winget.outputs.found == 'true'
+        run: python -m vux search -y jq
+      - if: steps.winget.outputs.found == 'true'
+        run: python -m vux info -y jqlang.jq
+      - if: steps.winget.outputs.found == 'true'
+        run: python -m vux install -y jqlang.jq
+      - if: steps.winget.outputs.found == 'true'
+        run: python -m vux remove -y jqlang.jq

@@ -5,7 +5,8 @@ from vux.platform_detect import PlatformInfo
 ARCH = PlatformInfo(system="linux", distro_id="arch", distro_name="Arch Linux", has_pacman=True)
 UBUNTU = PlatformInfo(system="linux", distro_id="ubuntu", distro_like=("debian",),
                       distro_name="Ubuntu 24.04 LTS")
-WINDOWS = PlatformInfo(system="windows")
+WINDOWS = PlatformInfo(system="windows", has_winget=True)
+WINDOWS_NO_WINGET = PlatformInfo(system="windows")
 
 
 class RecordingRunner:

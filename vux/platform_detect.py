@@ -29,6 +29,7 @@ class PlatformInfo:
     distro_like: Tuple[str, ...] = field(default_factory=tuple)
     distro_name: str = ""  # human-friendly PRETTY_NAME
     has_pacman: bool = False
+    has_winget: bool = False
 
     @property
     def is_linux(self) -> bool:
@@ -95,6 +96,8 @@ def detect_platform(
     different machine.
     """
     system = (system or _stdlib_platform.system()).lower()
+    if system == "windows":
+        return PlatformInfo(system="windows", has_winget=which("winget") is not None)
     if system != "linux":
         return PlatformInfo(system=system)
 

@@ -9,7 +9,7 @@ from typing import Callable, List, Optional, Sequence
 
 from vux import __version__
 from vux.backends import BACKENDS, auto_backend_name, get_backend
-from vux.backends.base import Backend, Runner, dry_run_runner
+from vux.backends.base import Backend, Command, Runner, dry_run_runner
 from vux.errors import VuxError
 from vux.platform_detect import PlatformInfo, detect_platform
 
@@ -106,11 +106,22 @@ def _make_backend(
     return get_backend(name, **options)
 
 
-def _command_for(backend: Backend, command: str, args: argparse.Namespace) -> List[str]:
+def _commands_for(backend: Backend, command: str, args: argparse.Namespace) -> List[Command]:
+    """The command(s) to run. Usually one; one per package for backends such
+    as winget that only take a single package at a time."""
+    packages = getattr(args, "packages", None)
+    if packages and backend.one_package_per_command:
+        return [_command_for(backend, command, [name], args) for name in packages]
+    return [_command_for(backend, command, packages, args)]
+
+
+def _command_for(
+    backend: Backend, command: str, packages: Optional[List[str]], args: argparse.Namespace
+) -> Command:
     if command == "install":
-        return backend.install_command(args.packages)
+        return backend.install_command(packages)
     if command == "remove":
-        return backend.remove_command(args.packages)
+        return backend.remove_command(packages)
     if command == "search":
         return backend.search_command(args.terms)
     if command == "update":
@@ -118,7 +129,7 @@ def _command_for(backend: Backend, command: str, args: argparse.Namespace) -> Li
     if command == "list":
         return backend.list_command(explicit_only=args.explicit)
     if command == "info":
-        return backend.info_command(args.packages)
+        return backend.info_command(packages)
     raise VuxError(f"unknown command: {command}")  # argparse prevents this
 
 
@@ -151,7 +162,12 @@ def main(
         if command == "platform":
             return _show_platform(info)
         backend = _make_backend(args, info, runner, which, root)
-        return backend.run(_command_for(backend, command, args))
+        commands = _commands_for(backend, command, args)  # validates every name first
+        for cmd in commands:
+            code = backend.run(cmd)
+            if code != 0:
+                return code  # stop at the first failure, like pacman does
+        return 0
     except VuxError as exc:
         print(f"vux: error: {exc}", file=sys.stderr)
         return 1

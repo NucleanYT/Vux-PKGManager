@@ -3,7 +3,8 @@ import dataclasses
 import io
 import unittest
 
-from tests.helpers import ARCH, UBUNTU, WINDOWS, RecordingRunner, fake_which
+from tests.helpers import (ARCH, UBUNTU, WINDOWS, WINDOWS_NO_WINGET, RecordingRunner,
+                           fake_which)
 from vux import __version__
 from vux.cli import main
 
@@ -79,6 +80,66 @@ class CommandTests(CliTestCase):
         self.assertEqual(code, 1)
 
 
+class WindowsTests(CliTestCase):
+    def run_win(self, *argv, exit_code=0):
+        return self.run_vux(*argv, info=WINDOWS, installed=("winget",), exit_code=exit_code)
+
+    def test_install(self):
+        code, commands, _, _ = self.run_win("install", "vlc")
+        self.assertEqual(code, 0)
+        self.assertEqual(commands, [["winget", "install", "vlc"]])
+
+    def test_install_several_runs_winget_once_per_package(self):
+        _, commands, _, _ = self.run_win("install", "VideoLAN.VLC", "Git.Git")
+        self.assertEqual(commands, [["winget", "install", "VideoLAN.VLC"],
+                                    ["winget", "install", "Git.Git"]])
+
+    def test_stops_at_first_failure(self):
+        code, commands, _, _ = self.run_win("install", "a", "b", exit_code=5)
+        self.assertEqual(code, 5)
+        self.assertEqual(commands, [["winget", "install", "a"]])
+
+    def test_bad_name_stops_before_running_anything(self):
+        code, commands, _, err = self.run_win("install", "vlc", "--", "--force")
+        self.assertEqual(code, 1)
+        self.assertEqual(commands, [])
+        self.assertIn("invalid package name", err)
+
+    def test_name_with_spaces(self):
+        _, commands, _, _ = self.run_win("install", "Google Chrome")
+        self.assertEqual(commands, [["winget", "install", "Google Chrome"]])
+
+    def test_other_commands(self):
+        cases = [
+            (("remove", "vlc"), [["winget", "uninstall", "vlc"]]),
+            (("search", "web", "browser"), [["winget", "search", "web browser"]]),
+            (("update",), [["winget", "upgrade", "--all"]]),
+            (("list",), [["winget", "list"]]),
+            (("info", "vlc", "git"), [["winget", "show", "vlc"], ["winget", "show", "git"]]),
+        ]
+        for argv, expected in cases:
+            with self.subTest(argv=argv):
+                self.assertEqual(self.run_win(*argv)[1], expected)
+
+    def test_yes_accepts_agreements(self):
+        _, commands, _, _ = self.run_win("install", "vlc", "-y")
+        self.assertEqual(commands, [["winget", "install", "vlc", "--accept-package-agreements",
+                                     "--accept-source-agreements"]])
+
+    def test_list_explicit_is_an_error(self):
+        code, commands, _, err = self.run_win("list", "--explicit")
+        self.assertEqual(code, 1)
+        self.assertEqual(commands, [])
+        self.assertIn("--explicit", err)
+
+    def test_dry_run_prints_each_command(self):
+        code, commands, out, _ = self.run_win("install", "-n", "vlc", "git")
+        self.assertEqual(code, 0)
+        self.assertEqual(commands, [])
+        self.assertEqual(out.splitlines(),
+                         ["would run: winget install vlc", "would run: winget install git"])
+
+
 class DryRunTests(CliTestCase):
     def test_dry_run_prints_and_runs_nothing(self):
         code, commands, out, _ = self.run_vux("install", "--dry-run", "firefox")
@@ -100,10 +161,18 @@ class ErrorTests(CliTestCase):
         self.assertEqual(commands, [])
         self.assertIn("not supported yet", err)
 
-    def test_windows_not_built_yet(self):
-        code, _, _, err = self.run_vux("install", "vim", info=WINDOWS, installed=())
+    def test_windows_without_winget(self):
+        code, commands, _, err = self.run_vux("install", "vlc", info=WINDOWS_NO_WINGET,
+                                              installed=())
         self.assertEqual(code, 1)
-        self.assertIn("Windows support is planned", err)
+        self.assertEqual(commands, [])
+        self.assertIn("winget was not found", err)
+
+    def test_aur_on_windows_is_an_error(self):
+        code, _, _, err = self.run_vux("install", "--aur", "vlc", info=WINDOWS,
+                                       installed=("winget",))
+        self.assertEqual(code, 1)
+        self.assertIn("--aur only works with the pacman backend", err)
 
     def test_pacman_present_on_unknown_distro_still_works(self):
         info = dataclasses.replace(UBUNTU, has_pacman=True)
@@ -140,8 +209,14 @@ class InfoCommandsTests(CliTestCase):
         self.assertIn("Arch Linux (Arch-based)", out)
         self.assertIn("backend: pacman", out)
 
+    def test_platform_on_windows(self):
+        code, _, out, _ = self.run_vux("platform", info=WINDOWS, installed=("winget",))
+        self.assertEqual(code, 0)
+        self.assertIn("system:  Windows", out)
+        self.assertIn("backend: winget", out)
+
     def test_platform_on_unsupported(self):
-        code, _, out, _ = self.run_vux("platform", info=WINDOWS, installed=())
+        code, _, out, _ = self.run_vux("platform", info=WINDOWS_NO_WINGET, installed=())
         self.assertEqual(code, 0)
         self.assertIn("backend: none", out)
 

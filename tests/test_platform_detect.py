@@ -80,8 +80,14 @@ class DetectPlatformTests(unittest.TestCase):
         self.assertFalse(info.is_arch_based)
         self.assertFalse(info.has_pacman)
 
+    def test_windows_with_winget(self):
+        info = detect_platform("Windows", which=fake_which("winget"))
+        self.assertTrue(info.is_windows)
+        self.assertTrue(info.has_winget)
+
     def test_windows(self):
-        info = detect_platform("Windows")
+        info = detect_platform("Windows", which=fake_which())
+        self.assertFalse(info.has_winget)
         self.assertTrue(info.is_windows)
         self.assertFalse(info.is_linux)
         self.assertFalse(info.is_arch_based)

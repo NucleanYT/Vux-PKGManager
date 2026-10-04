@@ -78,6 +78,9 @@ class Backend(ABC):
 
     #: Short name used by ``--backend`` (e.g. "pacman").
     name: str = ""
+    #: True if the tool only accepts one package per command; Vux then runs
+    #: the command once for each package.
+    one_package_per_command: bool = False
 
     def __init__(
         self,
