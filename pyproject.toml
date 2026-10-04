@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "vux-pkgmanager"
+description = "Vux PKG Manager: one simple command for installing software on Linux and Windows"
+readme = "README.md"
+license = { text = "GPL-3.0" }
+requires-python = ">=3.9"
+dynamic = ["version"]
+
+[project.scripts]
+vux = "vux.cli:main"
+
+[tool.setuptools]
+packages = ["vux", "vux.backends"]
+
+[tool.setuptools.dynamic]
+version = { attr = "vux.__version__" }
